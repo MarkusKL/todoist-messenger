@@ -28,6 +28,7 @@ executable todoist-messenger-exe
                      , wai
                      , warp
                      , aeson
+                     , http-conduit
   default-language:    Haskell2010
 
 test-suite todoist-messenger-test
