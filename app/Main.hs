@@ -12,25 +12,53 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as L
 import Data.String (fromString)
 import System.Environment (lookupEnv)
+import Data.Maybe (fromMaybe)
+import Text.Read (readMaybe)
 
+
+data Env = Env { host :: Warp.HostPreference, port :: Int, token :: Token }
 
 main :: IO ()
 main = do
   putStrLn "Starting server..."
-  token <- lookupEnv "TOKEN"
-  case token of
-    Just t -> Warp.runEnv 8000 (app $ fromString t)
-    Nothing -> putStrLn "Please set the TOKEN environment variable"
+  menv <- getEnv
+  case menv of
+    Just env -> run env
+    Nothing -> putStrLn "Please set the HOST, PORT and TOKEN environment variables properly"
 
 
-app :: Token -> W.Application
-app token req res = do
+getEnv :: IO (Maybe Env)
+getEnv = do
+  mtoken <- lookupEnv "TOKEN"
+  host <- fromString . fromMaybe "127.0.0.1" <$> lookupEnv "HOST"
+  port' <- lookupEnv "PORT"
+  let port = fromMaybe 8000 $ port' >>= readMaybe
+  return $ Env host port <$> (fromString <$> mtoken)
+
+
+run :: Env -> IO ()
+run = Warp.runSettings <$> settings <*> app
+
+
+settings :: Env -> Warp.Settings
+settings env = foldr (.) id
+  [ Warp.setPort (port env)
+  , Warp.setHost (host env)
+  , Warp.setServerName ""
+  , Warp.setOnOpen $ \_ -> do
+      putStrLn $ "Listening on " ++ show (port env)
+      return True
+  ] Warp.defaultSettings
+
+
+app :: Env -> W.Application
+app env req res = do
   body <- W.strictRequestBody req
   let mess = (A.decode body) :: Maybe Message
   print mess
   case mess of
     Just (Message sender text) -> do
-      quickAdd token text
+      quickAdd (token env) text
       return ()
     Nothing ->
       return ()
